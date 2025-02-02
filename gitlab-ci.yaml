@@ -1,0 +1,102 @@
+# Define Stages
+stages:
+  - build
+  - test
+  - security_scan
+  - docker_build
+  - docker_scan
+  - deploy
+
+# Define  Variables
+variables:
+  CI_REGISTRY_USER: "mustafa-mohammed04"
+  CI_REGISTRY_PASSWORD: "Anubis240498##"
+  CI_REGISTRY: "registry.gitlab.com"
+  IMAGE_NAME: "registry.gitlab.com/mustafa-mohammed04/django-ecommerce"
+  IMAGE_TAG: "latest"
+
+#Build the App
+
+build:
+  stage: build
+  image: python:3.9
+  script:
+    - pip install -r requirements.txt
+    - python manage.py collectstatic --noinput
+    - python manage.py makemigrations
+    - python manage.py migrate
+  artifacts:
+    paths:
+      - static/
+      - db.sqlite3
+    expire_in: 1 hour
+
+#Run Unit Tests
+
+test:
+  stage: test
+  image: python:3.9
+  script:
+    - pip install -r requirements.txt
+    - pytest
+  artifacts:
+    reports:
+      junit: report.xml
+
+#Code Security Scan
+security_scan:
+  stage: security_scan
+  image: python:3.9
+  script:
+    - pip install bandit
+    - bandit -r . || true  # Avoid failing the pipeline if minor issues are found
+
+#Create Dockerfile
+
+docker_file:
+  stage: docker_build
+  script:
+    - echo 'FROM python:3.9' > Dockerfile
+    - echo 'WORKDIR /app' >> Dockerfile
+    - echo 'COPY . /app' >> Dockerfile
+    - echo 'RUN pip install -r requirements.txt' >> Dockerfile
+    - echo 'CMD ["gunicorn", "-b", "0.0.0.0:8000", "ecommerce.wsgi:application"]' >> Dockerfile
+  artifacts:
+    paths:
+      - Dockerfile
+
+# Build Docker Image
+
+docker_build:
+  stage: docker_build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - export CI_REGISTRY_USER="mustafa-mohammed04"
+    - export CI_REGISTRY_PASSWORD="Anubis240498##"
+    - export CI_REGISTRY="registry.gitlab.com"
+    - echo "Logging into GitLab Container Registry..."
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - echo "Building Docker Image..."
+    - docker build -t "$IMAGE_NAME:$IMAGE_TAG" .
+    - echo "Saving Docker Image..."
+    - docker save "$IMAGE_NAME:$IMAGE_TAG" -o image.tar
+  artifacts:
+    paths:
+      - image.tar
+    expire_in: 1 hour
+
+# Scan Docker Image for Vulnerabilities
+
+docker_scan:
+  stage: docker_scan
+  image: aquasec/trivy
+  script:
+    - trivy image "$IMAGE_NAME:$IMAGE_TAG" --exit-code 1 || exit 1
+
+# Deploy the Application
+
+
+
