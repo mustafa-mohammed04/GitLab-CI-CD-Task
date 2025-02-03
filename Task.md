@@ -18,7 +18,7 @@ cd Django-Ecommerce
 
 ## 3- Create a .gitlab-ci.yml file
 ``` bash
-vim task.gitlab-ci.yml
+vim .gitlab-ci.yml
 ```
 ``` yaml
 # Define Stages
